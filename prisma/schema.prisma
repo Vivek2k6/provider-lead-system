@@ -1,0 +1,61 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ServiceType {
+  SERVICE_1
+  SERVICE_2
+  SERVICE_3
+}
+
+model Lead {
+  id          String            @id @default(uuid())
+  name        String
+  phone       String
+  city        String
+  service     ServiceType
+  description String
+  createdAt   DateTime          @default(now())
+  assignments LeadAssignment[]
+
+  // ENFORCED AT DB LEVEL: Same phone number cannot create another lead for the SAME service
+  @@unique([phone, service])
+}
+
+model Provider {
+  id                 Int               @id // Hardcoded 1 to 8 as per rules
+  name               String
+  monthlyQuota       Int               @default(10)
+  leadsReceivedCount Int               @default(0)
+  lastAssignedAt     DateTime?         // Used to track fair round-robin rotation
+  assignments        LeadAssignment[]
+
+  @@index([lastAssignedAt(sort: Asc), leadsReceivedCount(sort: Asc)])
+}
+
+model LeadAssignment {
+  id         String   @id @default(uuid())
+  leadId     String
+  providerId Int
+  assignedAt DateTime @default(now())
+
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, providerId]) // A provider cannot receive the same lead twice
+}
+
+model WebhookLog {
+  id          String   @id // Stores unique eventId to guarantee idempotency
+  processedAt DateTime @default(now())
+}
+
+model IdempotencyKey {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  createdAt DateTime @default(now())
+}
